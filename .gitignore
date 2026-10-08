@@ -1,0 +1,7 @@
+.air/
+*.db
+*.db-shm
+*.db-wal
+jelly-diff
+data/
+.env*

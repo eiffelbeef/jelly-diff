@@ -1,0 +1,99 @@
+{{define "title"}}{{if .Event}}{{.Event.Title}} — jelly-diff{{else}}Event — jelly-diff{{end}}{{end}}
+
+{{define "content"}}
+<div class="detail-page">
+  <a href="/" class="back-link" aria-label="Back to feed">← Back to Feed</a>
+
+  {{if not .Event}}
+  <div class="empty-state">
+    <p class="empty-title">Event not found</p>
+  </div>
+  {{else}}
+  <article class="detail-card">
+    {{/* Show poster from the event's image tag */}}
+    {{if .Event.ImageTag}}
+    <div class="detail-poster">
+      <img
+        src="/images/{{.Event.JellyfinID}}?tag={{.Event.ImageTag}}&maxHeight=400&maxWidth=400&quality=90"
+        alt="Cover for {{.Event.Title}}"
+        class="poster-img"
+        loading="lazy"
+      >
+    </div>
+    {{end}}
+
+    <div class="detail-body">
+      <span class="event-badge event-badge--{{.Event.EventType}} event-badge--lg">
+        {{if eq .Event.EventType "added"}}+ Added{{else}}- Removed{{end}}
+      </span>
+      <h1 class="detail-title">{{.Event.Title}}</h1>
+      <p class="detail-subtitle">
+        <span class="event-library">{{.Event.LibraryName}}</span>
+        {{if .Event.MediaType}}&middot; <span>{{.Event.MediaType}}</span>{{end}}
+        {{if gt .Year 0}}&middot; <span>{{.Year}}</span>{{end}}
+      </p>
+
+      <hr class="detail-divider">
+
+      {{if .Overview}}
+      <div class="detail-section">
+        <h2 class="detail-section-title">Overview</h2>
+        <p class="detail-overview">{{.Overview}}</p>
+      </div>
+      {{end}}
+
+      {{if .Genres}}
+      <div class="detail-section">
+        <h2 class="detail-section-title">Genres</h2>
+        <div class="genre-tags">
+          {{range .Genres}}
+          <span class="genre-tag">{{.}}</span>
+          {{end}}
+        </div>
+      </div>
+      {{end}}
+
+      {{if gt .Rating 0.0}}
+      <div class="detail-section">
+        <h2 class="detail-section-title">Community Rating</h2>
+        <p class="detail-rating">⭐ {{printf "%.1f" .Rating}} / 10</p>
+      </div>
+      {{end}}
+
+      <div class="detail-section">
+        <div class="detail-meta-list">
+          <div class="meta-row">
+            <span class="meta-key">Event occurred</span>
+            <time class="meta-val" datetime="{{.Event.OccurredAt.Format "2006-01-02T15:04:05Z"}}">
+              {{.Event.OccurredAt.Format "January 2, 2006 at 15:04 UTC"}}
+            </time>
+          </div>
+          {{if not .AddedAt.IsZero}}
+          <div class="meta-row">
+            <span class="meta-key">Added to Jellyfin</span>
+            <span class="meta-val">{{formatDate .AddedAt}}</span>
+          </div>
+          {{end}}
+          <div class="meta-row">
+            <span class="meta-key">Jellyfin ID</span>
+            <code class="meta-val meta-code">{{.Event.JellyfinID}}</code>
+          </div>
+        </div>
+      </div>
+
+      {{if eq .Event.EventType "added"}}
+      <div class="detail-actions">
+        <a
+          href="{{.JellyfinURL}}/web/#/details?id={{.Event.JellyfinID}}"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="btn btn-primary"
+          aria-label="Open in Jellyfin"
+        >Open in Jellyfin ↗</a>
+      </div>
+      {{end}}
+    </div>
+  </article>
+  {{end}}
+</div>
+{{end}}

@@ -1,0 +1,76 @@
+{{define "base"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{block "title" .}}jelly-diff{{end}}</title>
+  <link rel="stylesheet" href="/static/style.css?v=26">
+  <link rel="icon" href="/static/favicon.svg">
+  <script>
+    (function () {
+      var t = localStorage.getItem('theme') || 'auto';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a href="/" class="site-logo" aria-label="jelly-diff home">
+        <span class="logo-pill logo-pill--add">+</span>
+        <span class="logo-pill logo-pill--remove">-</span>
+        <span class="logo-text">jelly-diff</span>
+      </a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="/" class="nav-link">Feed</a>
+        <a href="/stats" class="nav-link">Stats</a>
+      </nav>
+      <div class="header-actions">
+        {{block "header-actions" .}}
+        <button
+          class="btn btn-sm sync-btn"
+          id="syncBtn"
+          aria-label="Trigger manual sync"
+          data-csrf="{{.CSRFToken}}"
+        >{{icon "sync"}}<span class="sync-label">Sync Now</span></button>
+        <button
+          type="button"
+          class="nav-icon-btn"
+          id="themeToggle"
+          aria-label="Toggle color theme"
+          title="Theme: {{if eq .Theme "light"}}Light{{else if eq .Theme "dark"}}Dark{{else}}Auto (system){{end}}"
+        ><span class="theme-icon theme-icon--auto">{{icon "device-desktop"}}</span><span class="theme-icon theme-icon--light">{{icon "sun"}}</span><span class="theme-icon theme-icon--dark">{{icon "moon"}}</span></button>
+        {{if .Username}}
+        <a href="/logout" class="nav-icon-btn nav-icon-btn--logout" aria-label="Sign out" title="Sign out">
+          {{icon "sign-out"}}
+        </a>
+        {{end}}
+        {{end}}
+      </div>
+    </div>
+  </header>
+
+  {{if .LastSyncAt}}
+  <div class="sub-header">
+    <div class="container sub-header-container">
+      <span class="sync-status" id="lastSync">Last sync: {{.LastSyncAt}}</span>
+    </div>
+  </div>
+  {{end}}
+
+  <main class="container main-content">
+    {{block "content" .}}
+    {{end}}
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <span>jelly-diff &mdash; <a href="https://github.com/eiffelbeef/jelly-diff">GitHub</a></span>
+    </div>
+  </footer>
+
+  <script src="/static/app.js?v=13"></script>
+</body>
+</html>
+{{end}}

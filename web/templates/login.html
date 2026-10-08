@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign in — jelly-diff</title>
+  <link rel="stylesheet" href="/static/style.css?v=25">
+  <link rel="icon" href="/static/favicon.svg">
+  <script>
+    (function () {
+      var t = localStorage.getItem('theme') || 'auto';
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body class="login-body">
+  <div class="login-wrapper">
+    <div class="login-header">
+      <a href="/login" class="site-logo" aria-label="jelly-diff">
+        <span class="logo-pill logo-pill--add">+</span>
+        <span class="logo-pill logo-pill--remove">-</span>
+        <span class="logo-text">jelly-diff</span>
+      </a>
+      <h1 class="login-title">Sign in with Jellyfin</h1>
+    </div>
+
+    {{if .Error}}
+    <div class="flash flash-error" role="alert">
+      {{.Error}}
+    </div>
+    {{end}}
+
+    <div class="login-card">
+      <form method="post" action="/login" class="login-form">
+        <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+        <input type="hidden" name="next" value="{{.Next}}">
+
+        <div class="form-group">
+          <label for="username" class="form-label">Username</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            class="input"
+            required
+            autofocus
+            autocomplete="username"
+            value="{{.Username}}"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="password" class="form-label">Password</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="input"
+            autocomplete="current-password"
+          >
+        </div>
+
+        <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+      </form>
+    </div>
+
+    <p class="login-footer">
+      Authenticating against <span class="login-server">{{.ServerURL}}</span>
+    </p>
+  </div>
+</body>
+</html>

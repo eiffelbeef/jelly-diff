@@ -1,0 +1,118 @@
+{{define "title"}}Activity Feed — jelly-diff{{end}}
+
+{{define "content"}}
+<div class="feed-page">
+  <!-- Filter bar -->
+  <aside class="filter-sidebar">
+    <form class="filter-form" method="get" action="/">
+      <h2 class="filter-heading">Filter</h2>
+
+      <div class="filter-group">
+        <label for="q" class="filter-label">Search</label>
+        <input
+          type="search" id="q" name="q"
+          class="input" placeholder="Search titles, series, albums…"
+          value="{{.Filter.Query}}"
+          aria-label="Search titles, series, albums"
+        >
+      </div>
+
+      <div class="filter-group">
+        <label for="type" class="filter-label">Event type</label>
+        <select id="type" name="type" class="input select" aria-label="Filter by event type">
+          <option value="">All</option>
+          <option value="added"  {{if eq .Filter.EventType "added"}}selected{{end}}>Added</option>
+          <option value="removed" {{if eq .Filter.EventType "removed"}}selected{{end}}>Removed</option>
+        </select>
+      </div>
+
+      {{if .Libraries}}
+      <div class="filter-group">
+        <label for="library" class="filter-label">Library</label>
+        <select id="library" name="library" class="input select" aria-label="Filter by library">
+          <option value="">All libraries</option>
+          {{range .Libraries}}
+          <option value="{{.}}" {{if eq . $.Filter.Library}}selected{{end}}>{{.}}</option>
+          {{end}}
+        </select>
+      </div>
+      {{end}}
+
+      <button type="submit" class="btn btn-primary btn-block">Apply</button>
+      {{if or .Filter.Query .Filter.EventType .Filter.Library}}
+      <a href="/" class="btn btn-block btn-default" style="margin-top:0.5rem">Clear</a>
+      {{end}}
+    </form>
+  </aside>
+
+  <!-- Event feed -->
+  <section class="feed-main" aria-label="Activity feed">
+    {{if .DayGroups}}
+    {{else}}
+    <div class="empty-state">
+      <p class="empty-icon">📭</p>
+      <p class="empty-title">No events yet</p>
+      <p class="empty-sub">Run a sync to start tracking your Jellyfin library changes.</p>
+    </div>
+    {{end}}
+    {{if .DayGroups}}
+
+    {{range .DayGroups}}
+    <div class="day-group">
+      <h2 class="day-label">{{.Label}}</h2>
+      <ul class="event-list" role="list">
+        {{range .Events}}
+        <li class="event-card">
+          <a href="/events/{{.ID}}" class="event-card-link" aria-label="{{.EventType}} {{.Title}}" title="{{.Title}}">
+            <span class="event-badge event-badge--{{.EventType}}" aria-label="{{.EventType}}">{{if eq .EventType "added"}}+{{else}}-{{end}}</span>
+
+            {{if .ImageTag}}
+            <img
+              class="event-thumb"
+              src="/images/{{.JellyfinID}}?tag={{.ImageTag}}&maxHeight=100&quality=90"
+              alt="Cover for {{.Title}}"
+              loading="lazy"
+            >
+            {{else}}
+            <div class="event-thumb event-thumb--placeholder" aria-hidden="true">
+              {{if or (eq .MediaType "Audio") (eq .MediaType "MusicAlbum")}}🎵{{else if eq .MediaType "Book"}}📚{{else}}🎬{{end}}
+            </div>
+            {{end}}
+
+            <div class="event-meta">
+              <span class="event-title" title="{{.Title}}">{{.Title}}</span>
+              <span class="event-details">
+                <span class="event-library">{{.LibraryName}}</span>
+                {{if .MediaType}}<span class="event-type">{{.MediaType}}</span>{{end}}
+              </span>
+            </div>
+
+            <time class="event-time" datetime="{{.OccurredAt.Format "2006-01-02T15:04:05Z"}}">
+              {{relTime .OccurredAt}}
+            </time>
+          </a>
+        </li>
+        {{end}}
+      </ul>
+    </div>
+    {{end}}
+
+    <!-- Pagination -->
+    {{if gt .TotalPages 1}}
+    <nav class="pagination" aria-label="Pagination">
+      {{if gt .Page 1}}
+      <a href="?page={{sub .Page 1}}&library={{.Filter.Library}}&type={{.Filter.EventType}}&q={{.Filter.Query}}" class="btn btn-default" aria-label="Previous page">← Prev</a>
+      {{end}}
+
+      <span class="pagination-info">Page {{.Page}} of {{.TotalPages}} &middot; {{.Total}} events</span>
+
+      {{if lt .Page .TotalPages}}
+      <a href="?page={{add .Page 1}}&library={{.Filter.Library}}&type={{.Filter.EventType}}&q={{.Filter.Query}}" class="btn btn-default" aria-label="Next page">Next →</a>
+      {{end}}
+    </nav>
+    {{end}}
+
+    {{end}}
+  </section>
+</div>
+{{end}}

@@ -1,0 +1,50 @@
+{{define "title"}}Statistics — jelly-diff{{end}}
+
+{{define "content"}}
+<div class="stats-page">
+  <h1 class="page-title">Statistics</h1>
+  {{if .LastSyncAt}}
+  <p class="page-subtitle">Last sync: {{.LastSyncAt}}</p>
+  {{end}}
+
+  <!-- Summary cards -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <span class="stat-value">{{.Stats.TotalItems}}</span>
+      <span class="stat-label">Items tracked</span>
+    </div>
+    <div class="stat-card stat-card--green">
+      <span class="stat-value">{{.Stats.AddedThisWeek}}</span>
+      <span class="stat-label">Added this week</span>
+    </div>
+    <div class="stat-card stat-card--green">
+      <span class="stat-value">{{.Stats.AddedThisMonth}}</span>
+      <span class="stat-label">Added this month</span>
+    </div>
+    <div class="stat-card stat-card--red">
+      <span class="stat-value">{{.Stats.RemovedThisWeek}}</span>
+      <span class="stat-label">Removed this week</span>
+    </div>
+    <div class="stat-card stat-card--red">
+      <span class="stat-value">{{.Stats.RemovedThisMonth}}</span>
+      <span class="stat-label">Removed this month</span>
+    </div>
+  </div>
+
+  <!-- Daily chart -->
+  <section class="chart-section" aria-label="Daily activity over last 30 days">
+    <h2 class="chart-title">Daily Activity (last 30 days)</h2>
+    <div class="chart-legend">
+      <span class="legend-item legend-item--green">Added</span>
+      <span class="legend-item legend-item--red">Removed</span>
+    </div>
+    <div class="chart-wrapper">
+      {{.ChartSVG}}
+    </div>
+  </section>
+
+  <div class="stats-actions">
+    <a href="/" class="btn btn-default">← View Feed</a>
+  </div>
+</div>
+{{end}}
