@@ -1,4 +1,4 @@
-# 🪼 jelly-diff
+# jelly-diff
 
 > Track what gets added to and removed from your Jellyfin media library.
 
