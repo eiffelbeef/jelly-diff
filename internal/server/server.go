@@ -111,7 +111,7 @@ func (s *Server) routes() {
 		auth.Get("/stats", s.handleStats)
 
 		// Image proxy (fetched as logged-in Jellyfin user)
-		auth.Get("/images/{id}", s.handleProxyImage)
+		auth.Get("/images/{id:[a-zA-Z0-9_-]+}", s.handleProxyImage)
 
 		// API routes
 		auth.Get("/api/events", s.handleAPIEvents)

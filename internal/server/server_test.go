@@ -300,6 +300,17 @@ func TestEventDetailAndImageProxy(t *testing.T) {
 		t.Errorf("expected proxied image data, got %s", rec.Body.String())
 	}
 
+	// 2b. GET /images with invalid or traversal ID is rejected by route constraint
+	for _, badID := range []string{"../secret", "invalid/path", "bad$id", "item..1"} {
+		badRec := httptest.NewRecorder()
+		badReq := httptest.NewRequest(http.MethodGet, "/images/"+badID, nil)
+		badReq.AddCookie(sessCookie)
+		srv.ServeHTTP(badRec, badReq)
+		if badRec.Code == http.StatusOK {
+			t.Errorf("expected bad image ID %q to not return 200, got %d", badID, badRec.Code)
+		}
+	}
+
 	// 3. GET /stats authenticated
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/stats", nil)

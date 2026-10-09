@@ -233,7 +233,7 @@ func (c *Client) GetItemForUser(ctx context.Context, token, userID, itemID strin
 // ProxyImage requests a primary image from Jellyfin as the authenticated user.
 // The caller is responsible for closing the returned Response.Body.
 func (c *Client) ProxyImage(ctx context.Context, token, itemID string, query url.Values) (*http.Response, error) {
-	rawURL := fmt.Sprintf("%s/Items/%s/Images/Primary", c.baseURL, itemID)
+	rawURL := fmt.Sprintf("%s/Items/%s/Images/Primary", c.baseURL, url.PathEscape(itemID))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
 		return nil, err
