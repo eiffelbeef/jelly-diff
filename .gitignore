@@ -2,6 +2,6 @@
 *.db
 *.db-shm
 *.db-wal
-jelly-diff
+/jelly-diff
 data/
 .env*
