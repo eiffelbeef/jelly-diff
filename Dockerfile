@@ -13,9 +13,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /jelly-diff ./cmd/jelly-diff
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
-FROM alpine:3.20
+FROM alpine:latest
 
-RUN apk add --no-cache tzdata ca-certificates
+RUN apk upgrade --no-cache && \
+    apk add --no-cache tzdata ca-certificates
 
 ARG PUID=1000
 ARG PGID=1000

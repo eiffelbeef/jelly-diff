@@ -1,6 +1,8 @@
 name: Publish Docker Image
 
 on:
+  schedule:
+    - cron: '0 3 * * 1' # Every Monday at 03:00 UTC
   push:
     branches:
       - main
@@ -38,7 +40,7 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository }}
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.event_name == 'schedule' }}
             type=ref,event=tag
             type=sha,prefix=
 
@@ -47,6 +49,7 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
+          pull: true
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
