@@ -876,11 +876,18 @@ func TestSyncNewSeriesDoesNotEmitDuplicateSeriesEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sync removal failed: %v", err)
 	}
-	// Verify that no removal event was created for the "Series" container item
-	for _, rev := range remEvs {
-		if rev.MediaType == "Series" {
-			t.Errorf("expected no Series removal event, but got %+v", rev)
-		}
+	// Verify that Carrie Season 1 is grouped into exactly 1 removal event
+	if len(remEvs) != 1 {
+		t.Fatalf("expected 1 removal event for Carrie Season 1, got %d: %+v", len(remEvs), remEvs)
+	}
+	if remEvs[0].Title != expectedTitle {
+		t.Errorf("expected removal event title %q, got %q", expectedTitle, remEvs[0].Title)
+	}
+	if remEvs[0].EventType != "removed" {
+		t.Errorf("expected EventType 'removed', got %q", remEvs[0].EventType)
+	}
+	if remEvs[0].MediaType != "Episode" {
+		t.Errorf("expected MediaType 'Episode', got %q", remEvs[0].MediaType)
 	}
 }
 
@@ -941,6 +948,180 @@ func TestWorkerSyncSeqAndLastSyncEvents(t *testing.T) {
 	}
 	if worker.LastSyncEvents() != 2 {
 		t.Fatalf("expected LastSyncEvents 2, got %d", worker.LastSyncEvents())
+	}
+}
+
+func TestSyncMultipleEpisodeRemovalsGroupedBySeason(t *testing.T) {
+	store := openTestStore(t)
+	ctx := context.Background()
+
+	var currentItems []map[string]any
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/Users":
+			json.NewEncoder(w).Encode([]map[string]any{
+				{"Id": "admin", "Policy": map[string]any{"IsAdministrator": true}},
+			})
+		case "/Users/admin/Views":
+			json.NewEncoder(w).Encode(map[string]any{
+				"Items": []map[string]any{
+					{"Id": "lib-tv", "Name": "Shows", "CollectionType": "tvshows"},
+				},
+			})
+		case "/Users/admin/Items":
+			json.NewEncoder(w).Encode(map[string]any{
+				"Items":            currentItems,
+				"TotalRecordCount": len(currentItems),
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	client := jellyfin.NewClient(srv.URL, "testkey")
+	worker := NewWorker(&config.Config{SyncInterval: time.Hour}, client, store, notify.NoOp{})
+
+	// 1. Initial state: The Wire
+	// Series container + 1 episode of S01, 12 episodes of S02, 12 episodes of S03
+	currentItems = []map[string]any{
+		{
+			"Id":             "series-wire",
+			"Name":           "The Wire",
+			"Type":           "Series",
+			"ProductionYear": 2002,
+			"ImageTags":      map[string]any{"Primary": "poster-wire"},
+		},
+		{
+			"Id":                    "wire-s01e01",
+			"Name":                  "The Target",
+			"Type":                  "Episode",
+			"SeriesId":              "series-wire",
+			"SeriesName":            "The Wire",
+			"SeasonId":              "season-1",
+			"SeasonName":            "Season 1",
+			"ParentIndexNumber":     1,
+			"IndexNumber":           1,
+			"ProductionYear":        2002,
+			"SeriesPrimaryImageTag": "poster-wire",
+		},
+	}
+	for i := 1; i <= 12; i++ {
+		currentItems = append(currentItems, map[string]any{
+			"Id":                    fmt.Sprintf("wire-s02e%02d", i),
+			"Name":                  fmt.Sprintf("Episode %d", i),
+			"Type":                  "Episode",
+			"SeriesId":              "series-wire",
+			"SeriesName":            "The Wire",
+			"SeasonId":              "season-2",
+			"SeasonName":            "Season 2",
+			"ParentIndexNumber":     2,
+			"IndexNumber":           i,
+			"ProductionYear":        2003,
+			"SeriesPrimaryImageTag": "poster-wire",
+		})
+	}
+	for i := 1; i <= 12; i++ {
+		currentItems = append(currentItems, map[string]any{
+			"Id":                    fmt.Sprintf("wire-s03e%02d", i),
+			"Name":                  fmt.Sprintf("Episode %d", i),
+			"Type":                  "Episode",
+			"SeriesId":              "series-wire",
+			"SeriesName":            "The Wire",
+			"SeasonId":              "season-3",
+			"SeasonName":            "Season 3",
+			"ParentIndexNumber":     3,
+			"IndexNumber":           i,
+			"ProductionYear":        2004,
+			"SeriesPrimaryImageTag": "poster-wire",
+		})
+	}
+
+	addEvents, err := worker.syncLibrary(ctx, jellyfin.Library{ID: "lib-tv", Name: "Shows"})
+	if err != nil {
+		t.Fatalf("initial sync failed: %v", err)
+	}
+	// Additions: S01 has 1 episode (single title), S02 has 12 episodes (season title), S03 has 12 episodes (season title)
+	if len(addEvents) != 3 {
+		t.Fatalf("expected 3 addition events, got %d: %+v", len(addEvents), addEvents)
+	}
+
+	// 2. Delete Season 2 and Season 3 (24 episodes total), leaving Season 1
+	currentItems = []map[string]any{
+		{
+			"Id":             "series-wire",
+			"Name":           "The Wire",
+			"Type":           "Series",
+			"ProductionYear": 2002,
+			"ImageTags":      map[string]any{"Primary": "poster-wire"},
+		},
+		{
+			"Id":                    "wire-s01e01",
+			"Name":                  "The Target",
+			"Type":                  "Episode",
+			"SeriesId":              "series-wire",
+			"SeriesName":            "The Wire",
+			"SeasonId":              "season-1",
+			"SeasonName":            "Season 1",
+			"ParentIndexNumber":     1,
+			"IndexNumber":           1,
+			"ProductionYear":        2002,
+			"SeriesPrimaryImageTag": "poster-wire",
+		},
+	}
+
+	remEvents, err := worker.syncLibrary(ctx, jellyfin.Library{ID: "lib-tv", Name: "Shows"})
+	if err != nil {
+		t.Fatalf("removal sync failed: %v", err)
+	}
+
+	// Must produce exactly TWO removal events (one for Season 2 and one for Season 3)
+	// NOT 24 individual episode events!
+	if len(remEvents) != 2 {
+		t.Fatalf("expected exactly 2 removal events, got %d: %+v", len(remEvents), remEvents)
+	}
+
+	expectedS02 := "The Wire — Season 2 (12 episodes)"
+	expectedS03 := "The Wire — Season 3 (12 episodes)"
+
+	titles := []string{remEvents[0].Title, remEvents[1].Title}
+	if remEvents[0].Title != expectedS02 || remEvents[1].Title != expectedS03 {
+		t.Errorf("expected %q and %q, got %+v", expectedS02, expectedS03, titles)
+	}
+
+	for _, ev := range remEvents {
+		if ev.EventType != "removed" {
+			t.Errorf("expected EventType 'removed', got %q", ev.EventType)
+		}
+		if ev.MediaType != "Episode" {
+			t.Errorf("expected MediaType 'Episode', got %q", ev.MediaType)
+		}
+		if ev.JellyfinID != "series-wire" {
+			t.Errorf("expected JellyfinID 'series-wire', got %q", ev.JellyfinID)
+		}
+		if ev.ImageTag != "poster-wire" {
+			t.Errorf("expected ImageTag 'poster-wire', got %q", ev.ImageTag)
+		}
+	}
+
+	// 3. Delete the single remaining episode of Season 1
+	currentItems = []map[string]any{}
+	singleRemEvents, err := worker.syncLibrary(ctx, jellyfin.Library{ID: "lib-tv", Name: "Shows"})
+	if err != nil {
+		t.Fatalf("single episode removal failed: %v", err)
+	}
+
+	// Exactly ONE removal event for the single episode (and no Series container event)
+	if len(singleRemEvents) != 1 {
+		t.Fatalf("expected exactly 1 removal event for single episode, got %d: %+v", len(singleRemEvents), singleRemEvents)
+	}
+	expectedSingleTitle := "The Wire — S01E01 — The Target"
+	if singleRemEvents[0].Title != expectedSingleTitle {
+		t.Errorf("expected %q, got %q", expectedSingleTitle, singleRemEvents[0].Title)
+	}
+	if singleRemEvents[0].EventType != "removed" {
+		t.Errorf("expected EventType 'removed', got %q", singleRemEvents[0].EventType)
 	}
 }
 

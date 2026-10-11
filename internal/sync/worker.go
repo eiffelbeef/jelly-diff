@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -258,17 +260,18 @@ func (w *Worker) runSync(ctx context.Context) {
 
 // seasonKey uniquely identifies a season within a series.
 type seasonKey struct {
-	SeriesID string
-	SeasonID string
+	SeriesID  string
+	SeasonNum int
 }
 
-// seasonGroup accumulates episodes from one season during a sync.
-type seasonGroup struct {
-	SeriesName     string
-	SeasonName     string
-	SeasonNumber   int
-	SeriesImageTag string // image tag from the first episode that has one
-	Episodes       []jellyfin.Item
+type episodeItem struct {
+	ID           string
+	SeriesID     string
+	SeriesName   string
+	SeasonName   string
+	SeasonNumber int
+	Title        string
+	ImageTag     string
 }
 
 type candidateItem struct {
@@ -327,6 +330,7 @@ func (w *Worker) syncLibrary(ctx context.Context, lib jellyfin.Library) ([]stora
 	upgradedFPs := make(map[string]bool)
 	var removedIDs []string
 	var removedEvents []storage.Event
+	var removedEpisodes []episodeItem
 
 	for id, prev := range prevItems {
 		if newIDs[id] {
@@ -356,7 +360,9 @@ func (w *Worker) syncLibrary(ctx context.Context, lib jellyfin.Library) ([]stora
 			}
 		} else {
 			removedIDs = append(removedIDs, id)
-			if prev.MediaType != "Series" {
+			if prev.MediaType == "Episode" {
+				removedEpisodes = append(removedEpisodes, parseRemovedEpisode(id, prev, prevItems))
+			} else if prev.MediaType != "Series" {
 				targetID := targetIDFromMeta(id, prev)
 				removedEvents = append(removedEvents, storage.Event{
 					JellyfinID:  targetID,
@@ -371,17 +377,27 @@ func (w *Worker) syncLibrary(ctx context.Context, lib jellyfin.Library) ([]stora
 		}
 	}
 
+	removedEvents = append(removedEvents, groupEpisodes(removedEpisodes, "removed", lib.Name, now)...)
+
 	// Additions
 	var addedEvents []storage.Event
-	var newEpisodes []jellyfin.Item
+	var addedEpisodes []episodeItem
 
 	for _, candidate := range unseenCandidates {
 		if upgradedFPs[candidate.fp] {
 			continue // upgrade, skip event
 		}
 		item := candidate.item
-		if item.Type == "Episode" && item.SeriesID != "" && item.SeasonID != "" {
-			newEpisodes = append(newEpisodes, item)
+		if item.Type == "Episode" {
+			addedEpisodes = append(addedEpisodes, episodeItem{
+				ID:           item.ID,
+				SeriesID:     candidate.targetID,
+				SeriesName:   item.SeriesName,
+				SeasonName:   item.SeasonName,
+				SeasonNumber: item.ParentIndexNumber,
+				Title:        candidate.si.Title,
+				ImageTag:     candidate.si.ImageTag,
+			})
 		} else if item.Type != "Series" {
 			addedEvents = append(addedEvents, storage.Event{
 				JellyfinID:  candidate.targetID,
@@ -395,19 +411,7 @@ func (w *Worker) syncLibrary(ctx context.Context, lib jellyfin.Library) ([]stora
 		}
 	}
 
-	// Episode additions → group by season, emit one event per season group.
-	addedSeasons := groupEpisodesBySeason(newEpisodes)
-	for _, g := range addedSeasons {
-		addedEvents = append(addedEvents, storage.Event{
-			JellyfinID:  g.Episodes[0].SeriesID,
-			EventType:   "added",
-			OccurredAt:  now,
-			Title:       seasonTitle(g),
-			LibraryName: lib.Name,
-			MediaType:   "Episode",
-			ImageTag:    g.SeriesImageTag,
-		})
-	}
+	addedEvents = append(addedEvents, groupEpisodes(addedEpisodes, "added", lib.Name, now)...)
 
 	syncData := storage.LibrarySyncData{
 		Snapshot: storage.Snapshot{
@@ -595,52 +599,95 @@ func storedFingerprintFromMeta(meta storage.ItemMeta) string {
 	return fmt.Sprintf("%s|%s|%d", strings.ToLower(strings.TrimSpace(meta.Title)), strings.ToLower(meta.MediaType), meta.Year)
 }
 
-// groupEpisodesBySeason groups a slice of episodes by their season.
-func groupEpisodesBySeason(episodes []jellyfin.Item) []seasonGroup {
-	index := make(map[seasonKey]int) // key → index in groups
-	var groups []seasonGroup
+// groupEpisodes groups episode items by season and returns the corresponding events.
+// If multiple episodes belong to the same season, they are consolidated into one season event.
+// If only 1 episode belongs to a season, an individual episode event is returned.
+func groupEpisodes(episodes []episodeItem, eventType, libName string, now time.Time) []storage.Event {
+	grouped := make(map[seasonKey][]episodeItem)
+	var order []seasonKey
 
 	for _, ep := range episodes {
-		k := seasonKey{SeriesID: ep.SeriesID, SeasonID: ep.SeasonID}
-		imageTag := ep.SeriesPrimaryImageTag
-		if imageTag == "" {
-			imageTag = ep.ImageTags.Primary
+		key := seasonKey{SeriesID: ep.SeriesID, SeasonNum: ep.SeasonNumber}
+		if len(grouped[key]) == 0 {
+			order = append(order, key)
+		}
+		grouped[key] = append(grouped[key], ep)
+	}
+
+	sort.Slice(order, func(i, j int) bool {
+		if order[i].SeriesID != order[j].SeriesID {
+			return order[i].SeriesID < order[j].SeriesID
+		}
+		return order[i].SeasonNum < order[j].SeasonNum
+	})
+
+	var events []storage.Event
+	for _, key := range order {
+		eps := grouped[key]
+		first := eps[0]
+
+		title := first.Title
+		if len(eps) > 1 {
+			title = formatSeasonEventTitle(first.SeriesName, first.SeasonName, first.SeasonNumber, len(eps))
 		}
 
-		if i, ok := index[k]; ok {
-			groups[i].Episodes = append(groups[i].Episodes, ep)
-			if groups[i].SeriesImageTag == "" && imageTag != "" {
-				groups[i].SeriesImageTag = imageTag
-			}
-		} else {
-			index[k] = len(groups)
-			groups = append(groups, seasonGroup{
-				SeriesName:     ep.SeriesName,
-				SeasonName:     ep.SeasonName,
-				SeasonNumber:   ep.ParentIndexNumber,
-				SeriesImageTag: imageTag,
-				Episodes:       []jellyfin.Item{ep},
-			})
+		targetID := first.SeriesID
+		if targetID == "" {
+			targetID = first.ID
 		}
+
+		events = append(events, storage.Event{
+			JellyfinID:  targetID,
+			EventType:   eventType,
+			OccurredAt:  now,
+			LibraryName: libName,
+			Title:       title,
+			MediaType:   "Episode",
+			ImageTag:    first.ImageTag,
+		})
 	}
-	return groups
+
+	return events
 }
 
-// seasonTitle builds a human-readable event title for a season group.
-func seasonTitle(g seasonGroup) string {
-	n := len(g.Episodes)
-	if n == 1 {
-		ep := g.Episodes[0]
-		return formatEpisodeTitle(g.SeriesName, g.SeasonName, ep.Name, ep.ParentIndexNumber, ep.IndexNumber)
+func parseRemovedEpisode(id string, prev storage.ItemMeta, prevItems map[string]storage.ItemMeta) episodeItem {
+	ep := episodeItem{
+		ID:       id,
+		Title:    prev.Title,
+		ImageTag: prev.ImageTag,
 	}
-	eps := "episodes"
-	if g.SeasonName != "" {
-		return fmt.Sprintf("%s — %s (%d %s)", g.SeriesName, g.SeasonName, n, eps)
+
+	if parts := strings.Split(prev.SortTitle, "|"); len(parts) >= 3 && parts[0] == "ep" {
+		ep.SeasonNumber, _ = strconv.Atoi(parts[2])
+		if len(parts) >= 6 {
+			ep.SeriesID = parts[5]
+		}
 	}
-	if g.SeasonNumber > 0 {
-		return fmt.Sprintf("%s — Season %d (%d %s)", g.SeriesName, g.SeasonNumber, n, eps)
+
+	if ep.SeriesID == "" {
+		targetID := targetIDFromMeta(id, prev)
+		if targetID != id {
+			ep.SeriesID = targetID
+		}
 	}
-	return fmt.Sprintf("%s (%d %s)", g.SeriesName, n, eps)
+
+	if parts := strings.Split(prev.Title, " — "); len(parts) > 1 {
+		ep.SeriesName = parts[0]
+	} else if sMeta, ok := prevItems[ep.SeriesID]; ok && sMeta.Title != "" {
+		ep.SeriesName = sMeta.Title
+	}
+
+	return ep
+}
+
+func formatSeasonEventTitle(seriesName, seasonName string, seasonNum, count int) string {
+	if seasonName != "" {
+		return fmt.Sprintf("%s — %s (%d episodes)", seriesName, seasonName, count)
+	}
+	if seasonNum > 0 {
+		return fmt.Sprintf("%s — Season %d (%d episodes)", seriesName, seasonNum, count)
+	}
+	return fmt.Sprintf("%s (%d episodes)", seriesName, count)
 }
 
 func countByType(events []storage.Event, t string) int {
