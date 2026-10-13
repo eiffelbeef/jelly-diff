@@ -532,6 +532,7 @@ func TestIconFilesAndRendering(t *testing.T) {
 		"/static/icons/music.svg",
 		"/static/icons/book.svg",
 		"/static/icons/image.svg",
+		"/static/icons/mark-github.svg",
 		"/static/favicon.svg",
 	}
 
