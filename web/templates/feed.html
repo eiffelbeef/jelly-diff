@@ -62,7 +62,7 @@
       <h2 class="day-label">{{.Label}}</h2>
       <ul class="event-list" role="list">
         {{range .Events}}
-        <li class="event-card">
+        <li class="event-card" data-event-type="{{.EventType}}">
           <a href="/events/{{.ID}}" class="event-card-link" aria-label="{{.EventType}} {{.Title}}" title="{{.Title}}">
             <span class="event-badge event-badge--{{.EventType}}" aria-label="{{.EventType}}">{{if eq .EventType "added"}}+{{else}}-{{end}}</span>
 

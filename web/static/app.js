@@ -91,6 +91,8 @@
           if (m && !oldIds.has(m[1])) {
             var card = a.closest('.event-card');
             if (card) {
+              var isRemoved = card.getAttribute('data-event-type') === 'removed';
+              card.classList.add(isRemoved ? 'event-card--new-removed' : 'event-card--new-added');
               card.classList.add('event-card--new');
             }
           }

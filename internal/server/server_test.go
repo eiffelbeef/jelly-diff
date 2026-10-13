@@ -856,6 +856,14 @@ func TestFeedThumbPlaceholderAndImageOverlay(t *testing.T) {
 		t.Errorf("expected placeholder container class in feed HTML")
 	}
 
+	// Verify data-event-type is present for highlight styling
+	if !strings.Contains(body, `data-event-type="removed"`) {
+		t.Errorf("expected data-event-type=\"removed\" on event card")
+	}
+	if !strings.Contains(body, `data-event-type="added"`) {
+		t.Errorf("expected data-event-type=\"added\" on event card")
+	}
+
 	// Placeholder icon should be present as SVG, not emoji
 	if !strings.Contains(body, `class="event-thumb-icon"`) {
 		t.Errorf("expected event-thumb-icon in feed HTML")

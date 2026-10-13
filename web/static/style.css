@@ -492,14 +492,31 @@ ul { list-style: none; }
   transform: translateY(-1px);
 }
 
-.event-card.event-card--new {
-  animation: eventHighlight 3s ease-out;
+.event-card.event-card--new,
+.event-card.event-card--new-added {
+  animation: eventHighlightAdded 3s ease-out;
 }
 
-@keyframes eventHighlight {
+.event-card[data-event-type="removed"].event-card--new,
+.event-card.event-card--new-removed {
+  animation: eventHighlightRemoved 3s ease-out;
+}
+
+@keyframes eventHighlightAdded {
   0% {
-    border-color: var(--color-add, #2ea043);
-    box-shadow: 0 0 0 2px rgba(46, 160, 67, 0.45);
+    border-color: var(--color-green);
+    box-shadow: 0 0 0 2px var(--color-green-border, rgba(46, 160, 67, 0.45));
+  }
+  100% {
+    border-color: var(--color-border);
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+@keyframes eventHighlightRemoved {
+  0% {
+    border-color: var(--color-red);
+    box-shadow: 0 0 0 2px var(--color-red-border, rgba(209, 36, 47, 0.45));
   }
   100% {
     border-color: var(--color-border);
