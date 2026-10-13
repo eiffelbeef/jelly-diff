@@ -66,18 +66,18 @@
           <a href="/events/{{.ID}}" class="event-card-link" aria-label="{{.EventType}} {{.Title}}" title="{{.Title}}">
             <span class="event-badge event-badge--{{.EventType}}" aria-label="{{.EventType}}">{{if eq .EventType "added"}}+{{else}}-{{end}}</span>
 
-            {{if .ImageTag}}
-            <img
-              class="event-thumb"
-              src="/images/{{.JellyfinID}}?tag={{.ImageTag}}&maxHeight=100&quality=90"
-              alt="Cover for {{.Title}}"
-              loading="lazy"
-            >
-            {{else}}
             <div class="event-thumb event-thumb--placeholder" aria-hidden="true">
-              {{if or (eq .MediaType "Audio") (eq .MediaType "MusicAlbum")}}🎵{{else if eq .MediaType "Book"}}📚{{else}}🎬{{end}}
+              <span class="event-thumb-icon">{{if or (eq .MediaType "Audio") (eq .MediaType "MusicAlbum")}}{{icon "unmute"}}{{else if eq .MediaType "Book"}}{{icon "book"}}{{else}}{{icon "video"}}{{end}}</span>
+              {{if .ImageTag}}
+              <img
+                class="event-thumb-img"
+                src="/images/{{.JellyfinID}}?tag={{.ImageTag}}&maxHeight=100&quality=90"
+                alt=""
+                loading="lazy"
+                onerror="this.style.display='none'"
+              >
+              {{end}}
             </div>
-            {{end}}
 
             <div class="event-meta">
               <span class="event-title" title="{{.Title}}">{{.Title}}</span>

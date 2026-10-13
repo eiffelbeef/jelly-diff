@@ -298,3 +298,16 @@
     applyTheme(next);
   });
 })();
+
+// Gracefully hide broken thumbnail images so the placeholder shows through
+window.addEventListener('error', function (e) {
+  if (e.target && e.target.classList) {
+    if (e.target.classList.contains('event-thumb-img')) {
+      e.target.style.display = 'none';
+    } else if (e.target.classList.contains('poster-img')) {
+      var posterWrap = e.target.closest('.detail-poster');
+      if (posterWrap) posterWrap.style.display = 'none';
+    }
+  }
+}, true);
+

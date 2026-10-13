@@ -527,6 +527,11 @@ func TestIconFilesAndRendering(t *testing.T) {
 		"/static/icons/device-desktop.svg",
 		"/static/icons/sign-out.svg",
 		"/static/icons/sync.svg",
+		"/static/icons/film.svg",
+		"/static/icons/video.svg",
+		"/static/icons/music.svg",
+		"/static/icons/book.svg",
+		"/static/icons/image.svg",
 		"/static/favicon.svg",
 	}
 
@@ -788,4 +793,88 @@ func TestDayLabelAndRelTime(t *testing.T) {
 	}
 }
 
+func TestFeedThumbPlaceholderAndImageOverlay(t *testing.T) {
+	srv, store, _ := setupTestServer(t)
+	ctx := context.Background()
 
+	snapID, err := store.InsertSnapshot(ctx, storage.Snapshot{
+		TakenAt:     time.Now().UTC(),
+		LibraryID:   "lib1",
+		LibraryName: "Movies",
+		ItemCount:   2,
+	})
+	if err != nil {
+		t.Fatalf("insert snapshot failed: %v", err)
+	}
+
+	// Item with image tag (e.g. removed movie where image tag was retained)
+	err = store.InsertEvent(ctx, storage.Event{
+		SnapshotID:  snapID,
+		JellyfinID:  "movie-removed",
+		EventType:   "removed",
+		OccurredAt:  time.Now().UTC(),
+		Title:       "The Matrix",
+		LibraryName: "Movies",
+		MediaType:   "Movie",
+		ImageTag:    "tag-matrix",
+	})
+	if err != nil {
+		t.Fatalf("insert event failed: %v", err)
+	}
+
+	// Item without image tag
+	err = store.InsertEvent(ctx, storage.Event{
+		SnapshotID:  snapID,
+		JellyfinID:  "audio-no-image",
+		EventType:   "added",
+		OccurredAt:  time.Now().UTC(),
+		Title:       "Random Song",
+		LibraryName: "Music",
+		MediaType:   "Audio",
+		ImageTag:    "",
+	})
+	if err != nil {
+		t.Fatalf("insert event failed: %v", err)
+	}
+
+	sessToken := srv.sessions.Create("user-1", "user", "token", []string{"Movies", "Music"})
+	sessCookie := &http.Cookie{Name: sessionCookieName, Value: sessToken}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(sessCookie)
+	srv.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+
+	// Both items must have the .event-thumb placeholder container
+	if !strings.Contains(body, `class="event-thumb event-thumb--placeholder"`) {
+		t.Errorf("expected placeholder container class in feed HTML")
+	}
+
+	// Placeholder icon should be present as SVG, not emoji
+	if !strings.Contains(body, `class="event-thumb-icon"`) {
+		t.Errorf("expected event-thumb-icon in feed HTML")
+	}
+	if strings.Contains(body, "🎬") || strings.Contains(body, "🎵") || strings.Contains(body, "📚") {
+		t.Errorf("placeholder should not contain emojis")
+	}
+
+	// The item with ImageTag must have the overlay img with onerror fallback and empty alt
+	if !strings.Contains(body, `class="event-thumb-img"`) {
+		t.Errorf("expected event-thumb-img in feed HTML")
+	}
+	if !strings.Contains(body, `onerror="this.style.display='none'"`) {
+		t.Errorf("expected onerror handler on event-thumb-img")
+	}
+	if !strings.Contains(body, `alt=""`) {
+		t.Errorf("expected empty alt on event-thumb-img to avoid broken text")
+	}
+	// "Cover for The Matrix" should NOT be in the feed
+	if strings.Contains(body, "Cover for The Matrix") {
+		t.Errorf("feed should not contain 'Cover for The Matrix' alt text")
+	}
+}
