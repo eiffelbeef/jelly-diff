@@ -92,3 +92,111 @@ func TestGetItems_Pagination(t *testing.T) {
 		t.Fatalf("expected 2 items HTTP calls, got %d", itemsCalls)
 	}
 }
+
+func TestGetItemForUser_RequestsOverview(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Authorization"), `Token="my-user-token"`) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if !strings.Contains(r.URL.RawQuery, "Overview") {
+			t.Errorf("expected query params to request Overview in Fields, got: %s", r.URL.RawQuery)
+		}
+		if r.URL.Path == "/Users/user-42/Items/movie-100" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Item{
+				ID:       "movie-100",
+				Name:     "Interstellar",
+				Overview: "Mankind was born on Earth. It was never meant to die here.",
+				Genres:   []string{"Adventure", "Drama", "Sci-Fi"},
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "server-key")
+	item, err := c.GetItemForUser(context.Background(), "my-user-token", "user-42", "movie-100")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if item == nil {
+		t.Fatal("expected item, got nil")
+	}
+	if item.Overview != "Mankind was born on Earth. It was never meant to die here." {
+		t.Errorf("unexpected overview: %q", item.Overview)
+	}
+}
+
+func TestGetItemForUser_FallbackToItems(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Authorization"), `Token="my-user-token"`) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/Users/user-42/Items/movie-100" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.URL.Path == "/Items/movie-100" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Item{
+				ID:       "movie-100",
+				Name:     "Interstellar",
+				Overview: "Fallback overview from /Items/{id}",
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "server-key")
+	item, err := c.GetItemForUser(context.Background(), "my-user-token", "user-42", "movie-100")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if item == nil {
+		t.Fatal("expected item from fallback, got nil")
+	}
+	if item.Overview != "Fallback overview from /Items/{id}" {
+		t.Errorf("unexpected overview: %q", item.Overview)
+	}
+}
+
+func TestGetItem_ServerKey(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Authorization"), `Token="server-key"`) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if !strings.Contains(r.URL.RawQuery, "Overview") {
+			t.Errorf("expected query params to request Overview, got: %s", r.URL.RawQuery)
+		}
+		if r.URL.Path == "/Items/movie-200" {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(Item{
+				ID:       "movie-200",
+				Name:     "Oppenheimer",
+				Overview: "The story of J. Robert Oppenheimer.",
+			})
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.URL, "server-key")
+	item, err := c.GetItem(context.Background(), "movie-200")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if item == nil {
+		t.Fatal("expected item, got nil")
+	}
+	if item.Overview != "The story of J. Robert Oppenheimer." {
+		t.Errorf("unexpected overview: %q", item.Overview)
+	}
+}
+

@@ -15,6 +15,7 @@ type Item struct {
 	Type            string   `json:"Type"` // Movie, Series, Episode, MusicAlbum, …
 	ProductionYear  int      `json:"ProductionYear"`
 	Overview        string   `json:"Overview"`
+	OverviewHTML    string   `json:"OverviewHtml"`
 	Genres          []string `json:"Genres"`
 	CommunityRating float64  `json:"CommunityRating"`
 	DateCreated     string   `json:"DateCreated"`

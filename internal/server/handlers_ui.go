@@ -261,11 +261,19 @@ func (s *Server) handleEventDetail(w http.ResponseWriter, r *http.Request) {
 
 	// Fetch live rich metadata from Jellyfin as the authenticated user on-demand
 	var liveItem *jellyfin.Item
-	if sess.Token != "" && sess.UserID != "" {
+	if sess.Token != "" {
 		var fetchErr error
 		liveItem, fetchErr = s.client.GetItemForUser(r.Context(), sess.Token, sess.UserID, ev.JellyfinID)
 		if fetchErr != nil {
 			slog.Debug("get live item for user failed", "id", ev.JellyfinID, "err", fetchErr)
+		}
+	}
+	if liveItem == nil {
+		// Fallback to server API key if user-scoped fetch didn't return an item
+		if serverItem, err := s.client.GetItem(r.Context(), ev.JellyfinID); err == nil {
+			liveItem = serverItem
+		} else {
+			slog.Debug("get live item with server key failed", "id", ev.JellyfinID, "err", err)
 		}
 	}
 
@@ -277,11 +285,24 @@ func (s *Server) handleEventDetail(w http.ResponseWriter, r *http.Request) {
 
 	if liveItem != nil {
 		overview = liveItem.Overview
+		if overview == "" && liveItem.OverviewHTML != "" {
+			overview = liveItem.OverviewHTML
+		}
 		genres = liveItem.Genres
 		rating = liveItem.CommunityRating
 		year = liveItem.ProductionYear
 		if liveItem.DateCreated != "" {
 			addedAt, _ = time.Parse(time.RFC3339, liveItem.DateCreated)
+		}
+	}
+
+	// Fallback to stored item details if live item didn't provide year or addedAt (e.g. removed item)
+	if storedItem, err := s.store.GetItem(r.Context(), ev.JellyfinID); err == nil && storedItem != nil {
+		if year == 0 && storedItem.Year > 0 {
+			year = storedItem.Year
+		}
+		if addedAt.IsZero() && !storedItem.AddedAt.IsZero() {
+			addedAt = storedItem.AddedAt
 		}
 	}
 

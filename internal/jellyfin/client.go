@@ -208,13 +208,42 @@ func (c *Client) GetLibrariesForUser(ctx context.Context, token, userID string) 
 }
 
 // GetItemForUser fetches rich metadata for a single item using the authenticated user's token.
+// It explicitly requests Overview, Genres, and community rating.
 // If the item does not exist or the user has no permission, it returns (nil, nil).
 func (c *Client) GetItemForUser(ctx context.Context, token, userID, itemID string) (*Item, error) {
-	resp, err := c.getUserRequest(ctx, fmt.Sprintf("%s/Users/%s/Items/%s", c.baseURL, userID, itemID), token)
+	escapedID := url.PathEscape(itemID)
+	params := url.Values{
+		"Fields": {"Overview,OverviewHtml,Genres,CommunityRating,ProductionYear,DateCreated"},
+	}
+
+	var rawURL string
+	if userID != "" {
+		rawURL = fmt.Sprintf("%s/Users/%s/Items/%s?%s", c.baseURL, url.PathEscape(userID), escapedID, params.Encode())
+	} else {
+		rawURL = fmt.Sprintf("%s/Items/%s?%s", c.baseURL, escapedID, params.Encode())
+	}
+
+	resp, err := c.getUserRequest(ctx, rawURL, token)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound && userID != "" {
+		// Fallback to direct /Items/{id} with token
+		altURL := fmt.Sprintf("%s/Items/%s?%s", c.baseURL, escapedID, params.Encode())
+		altResp, altErr := c.getUserRequest(ctx, altURL, token)
+		if altErr == nil {
+			defer altResp.Body.Close()
+			if altResp.StatusCode == http.StatusOK {
+				var item Item
+				if err := json.NewDecoder(altResp.Body).Decode(&item); err == nil {
+					return &item, nil
+				}
+			}
+		}
+		return nil, nil
+	}
 
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		return nil, nil
@@ -226,6 +255,20 @@ func (c *Client) GetItemForUser(ctx context.Context, token, userID, itemID strin
 	var item Item
 	if err := json.NewDecoder(resp.Body).Decode(&item); err != nil {
 		return nil, fmt.Errorf("decode item: %w", err)
+	}
+	return &item, nil
+}
+
+// GetItem fetches rich metadata for a single item using the server API key.
+func (c *Client) GetItem(ctx context.Context, itemID string) (*Item, error) {
+	escapedID := url.PathEscape(itemID)
+	params := url.Values{
+		"Fields": {"Overview,OverviewHtml,Genres,CommunityRating,ProductionYear,DateCreated"},
+	}
+	rawURL := fmt.Sprintf("%s/Items/%s", c.baseURL, escapedID)
+	var item Item
+	if err := c.get(ctx, rawURL, params, &item); err != nil {
+		return nil, err
 	}
 	return &item, nil
 }
